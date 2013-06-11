@@ -222,7 +222,7 @@ saving keyboard macros (see `insert-kbd-macro')."
   ; spinning backwards over comments
   (let (pos)
     (while (and (setq pos (re-search-backward (cssm-list-2-regexp
-					       '("/\\*" "\\*/" "{" "}"))
+					       '("/\\*" "\\*/" "{" "}" "<"))
 					      (point-min) t))
 		(string= (match-string 0) "*/"))
       (search-backward "/*" (point-min) t))
@@ -249,7 +249,21 @@ saving keyboard macros (see `insert-kbd-macro')."
 			       'inside-atmedia
 			     'outside))
 			  (t 'outside))
-			 column
+			 (cond
+                          ((string= construct "<")
+                           (save-excursion
+                             (back-to-indentation)
+                             (+ (current-column) cssm-indent-level)))
+                          ((string= construct "{")
+                           (save-excursion
+                             (back-to-indentation)
+                             (current-column)))
+                          ((string= construct "}")
+                           (save-excursion
+                             (back-to-indentation)
+                             (current-column)))
+                          (t
+                           column))
 			 first-char))))
       
       (apply cssm-indent-function
@@ -309,8 +323,8 @@ saving keyboard macros (see `insert-kbd-macro')."
    ((or (eq position 'inside-atmedia)
 	(eq position 'inside-rule))
     (if (string= "}" first-char-on-line)
-	0
-      cssm-indent-level))
+	column
+      (+ cssm-indent-level column)))
 
    ((eq position 'inside-rule-and-atmedia)
     (if (string= "}" first-char-on-line)
@@ -321,7 +335,7 @@ saving keyboard macros (see `insert-kbd-macro')."
     (+ column 3))
 
    ((eq position 'outside)
-    0)))
+    column)))
 
 ;;; Typing shortcuts
 
