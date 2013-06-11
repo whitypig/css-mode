@@ -216,7 +216,8 @@ saving keyboard macros (see `insert-kbd-macro')."
 
 ;; internal
 (defun cssm-find-column(first-char)
-  "Find which column to indent to."
+  "Find which column to indent to.
+FIRST-CHAR is the first character of THIS line."
 
   ;; Find out where to indent to by looking at previous lines
   ;; spinning backwards over comments
@@ -233,38 +234,41 @@ saving keyboard macros (see `insert-kbd-macro')."
           (let ((construct      (match-string 0))
                 (column         (current-column)))
             (apply cssm-indent-function
-                   (list (cond
-                          ((string= construct "{")
-                           (cond
-                            ((cssm-rule-is-atmedia)
-                             'inside-atmedia)
-                            ((cssm-inside-atmedia-rule)
-                             'inside-rule-and-atmedia)
-                            (t
-                             'inside-rule)))
-                          ((string= construct "/*")
-                           'inside-comment)
-                          ((string= construct "}")
-                           (if (cssm-inside-atmedia-rule)
-                               'inside-atmedia
-                             'outside))
-                          (t 'outside))
-                         (cond
-                          ((string= construct "<")
-                           (save-excursion
-                             (back-to-indentation)
-                             (+ (current-column) cssm-indent-level)))
-                          ((string= construct "{")
-                           (save-excursion
-                             (back-to-indentation)
-                             (current-column)))
-                          ((string= construct "}")
-                           (save-excursion
-                             (back-to-indentation)
-                             (current-column)))
-                          (t
-                           column))
-                         first-char))))
+                   (list
+                    ;; rule
+                    (cond
+                     ((string= construct "{")
+                      (cond
+                       ((cssm-rule-is-atmedia)
+                        'inside-atmedia)
+                       ((cssm-inside-atmedia-rule)
+                        'inside-rule-and-atmedia)
+                       (t
+                        'inside-rule)))
+                     ((string= construct "/*")
+                      'inside-comment)
+                     ((string= construct "}")
+                      (if (cssm-inside-atmedia-rule)
+                          'inside-atmedia
+                        'outside))
+                     (t 'outside))
+                    ;; column
+                    (cond
+                     ((string= construct "<")
+                      ;; We are in <style>
+                      (save-excursion
+                        (back-to-indentation)
+                        (+ (current-column) cssm-indent-level)))
+                     ((member construct '("{" "}"))
+                      ;; whether we are inside or outside, we give the
+                      ;; left most column of this block to an indent
+                      ;; function
+                      (save-excursion
+                        (back-to-indentation)
+                        (current-column)))
+                     (t
+                      column))
+                    first-char))))
 
       (apply cssm-indent-function
              (list 'outside
@@ -319,6 +323,7 @@ saving keyboard macros (see `insert-kbd-macro')."
     0)))
 
 (defun cssm-c-style-indenter(position column first-char-on-line)
+  ;; COLUMN is the left-most column of this block.
   (cond
    ((or (eq position 'inside-atmedia)
         (eq position 'inside-rule))
