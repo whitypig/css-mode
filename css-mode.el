@@ -75,7 +75,7 @@ closing bracket or not.")
   "Which function to use when deciding which column to indent to. To get
 C-style indentation, use cssm-c-style-indenter.")
 
-; The rest of the code:
+;; The rest of the code:
 
 (defvar cssm-properties
   '("font-family" "font-style" "font-variant" "font-weight"
@@ -92,7 +92,7 @@ C-style indentation, use cssm-c-style-indenter.")
     "border-left" "border" "width" "height" "float" "clear" "display"
     "list-style" "white-space" "border-style" "border-color"
 
-    ; CSS level 2:
+    ;; CSS level 2:
 
     "azimuth" "border-bottom-color" "border-bottom-style"
     "border-collapse" "border-left-color" "border-left-style"
@@ -110,36 +110,36 @@ C-style indentation, use cssm-c-style-indenter.")
 
 (defvar cssm-properties-alist
   (mapcar (lambda(prop)
-      (cons (concat prop ":") nil)) cssm-properties)
+            (cons (concat prop ":") nil)) cssm-properties)
   "An association list of the CSS properties for completion use.")
 
 (defvar cssm-keywords
   (append '("!\\s-*important"
 
-    ; CSS level 2:
+            ;; CSS level 2:
 
-      "@media" "@import" "@page" "@font-face")
-    (mapcar (lambda(property)
-        (concat property "\\s-*:"))
-      cssm-properties))
+            "@media" "@import" "@page" "@font-face")
+          (mapcar (lambda(property)
+                    (concat property "\\s-*:"))
+                  cssm-properties))
   "A list of all CSS keywords.")
 
 (defvar cssm-pseudos
   '("link" "visited" "active" "first-line" "first-letter"
 
-    ; CSS level 2
+    ;; CSS level 2
     "first-child" "before" "after" "hover")
   "A list of all CSS pseudo-classes.")
 
-; internal
+;; internal
 (defun cssm-list-2-regexp(altlist)
   "Takes a list and returns the regexp \\(elem1\\|elem2\\|...\\)"
   (let ((regexp "\\("))
     (mapcar (lambda(elem)
-        (setq regexp (concat regexp elem "\\|")))
-      altlist)
+              (setq regexp (concat regexp elem "\\|")))
+            altlist)
     (concat (substring regexp 0 -2) ; cutting the last "\\|"
-      "\\)")
+            "\\)")
     ))
 
 (defvar cssm-font-lock-keywords
@@ -147,13 +147,13 @@ C-style indentation, use cssm-c-style-indenter.")
    (cons (cssm-list-2-regexp cssm-keywords) font-lock-keyword-face)
    (cons "\\.[a-zA-Z][-a-zA-Z0-9.]+" font-lock-variable-name-face)
    (cons (concat ":" (cssm-list-2-regexp cssm-pseudos))
-   font-lock-variable-name-face)
+         font-lock-variable-name-face)
    (cons "#[a-fA-F0-9][a-fA-F0-9][a-fA-F0-9]\\([a-fA-F0-9][a-fA-F0-9][a-fA-F0-9]\\)?"
-   font-lock-reference-face)
+         font-lock-reference-face)
    (cons "\\[.*\\]" font-lock-variable-name-face)
    (cons "#[-a-zA-Z0-9]*" font-lock-function-name-face)
    (cons "rgb(\\s-*[0-9]+\\(\\.[0-9]+\\s-*%\\s-*\\)?\\s-*,\\s-*[0-9]+\\(\\.[0-9]+\\s-*%\\s-*\\)?\\s-*,\\s-*[0-9]+\\(\\.[0-9]+\\s-*%\\s-*\\)?\\s-*)"
-   font-lock-reference-face)
+         font-lock-reference-face)
    )
   "Rules for highlighting CSS style sheets.")
 
@@ -169,87 +169,87 @@ C-style indentation, use cssm-c-style-indenter.")
 ;;; Cross-version compatibility layer
 
 (when (not (or (apropos-macrop 'kbd)
-       (fboundp 'kbd)))
-    (defmacro kbd (keys)
-      "Convert KEYS to the internal Emacs key representation.
+               (fboundp 'kbd)))
+  (defmacro kbd (keys)
+    "Convert KEYS to the internal Emacs key representation.
 KEYS should be a string constant in the format used for
 saving keyboard macros (see `insert-kbd-macro')."
-      (read-kbd-macro keys)))
+    (read-kbd-macro keys)))
 
 ;;; Auto-indentation support
 
-; internal
+;; internal
 (defun cssm-insert-right-brace-and-indent()
   (interactive)
   (insert "}")
   (cssm-indent-line))
 
-; internal
+;; internal
 (defun cssm-inside-atmedia-rule()
   "Decides if point is currently inside an @media rule."
   (let ((orig-pos (point))
-  (atmedia (re-search-backward "@media" 0 t))
-  (balance 1)   ; used to keep the {} balance, 1 because we start on a {
-  )
-     ; Going to the accompanying {
+        (atmedia (re-search-backward "@media" 0 t))
+        (balance 1)   ; used to keep the {} balance, 1 because we start on a {
+        )
+    ;; Going to the accompanying {
     (re-search-forward "{" (point-max) t)
     (if (null atmedia)
-  nil  ; no @media before this point => not inside
+        nil  ; no @media before this point => not inside
       (while (and (< (point) orig-pos)
-      (< 0 balance))
-  (if (null (re-search-forward "[{}]" (point-max) 0))
-      (goto-char (point-max)) ; break
-    (setq balance
-    (if (string= (match-string 0) "{")
-        (+ balance 1)
-      (- balance 1)))))
+                  (< 0 balance))
+        (if (null (re-search-forward "[{}]" (point-max) 0))
+            (goto-char (point-max)) ; break
+          (setq balance
+                (if (string= (match-string 0) "{")
+                    (+ balance 1)
+                  (- balance 1)))))
       (= balance 1))
     ))
 
-; internal
+;; internal
 (defun cssm-rule-is-atmedia()
   "Decides if point is currently on the { of an @media or ordinary style rule."
   (let ((result (re-search-backward "[@}{]" 0 t)))
     (if (null result)
-  nil
+        nil
       (string= (match-string 0) "@"))))
 
-; internal
+;; internal
 (defun cssm-find-column(first-char)
   "Find which column to indent to."
 
-  ; Find out where to indent to by looking at previous lines
-  ; spinning backwards over comments
+  ;; Find out where to indent to by looking at previous lines
+  ;; spinning backwards over comments
   (let (pos)
     (while (and (setq pos (re-search-backward (cssm-list-2-regexp
-                 '("/\\*" "\\*/" "{" "}" "<"))
-                (point-min) t))
-    (string= (match-string 0) "*/"))
+                                               '("/\\*" "\\*/" "{" "}" "<"))
+                                              (point-min) t))
+                (string= (match-string 0) "*/"))
       (search-backward "/*" (point-min) t))
 
-    ; did the last search find anything?
+    ;; did the last search find anything?
     (if pos
-  (save-excursion
-    (let ((construct      (match-string 0))
-    (column         (current-column)))
-      (apply cssm-indent-function
-       (list (cond
-        ((string= construct "{")
-         (cond
-          ((cssm-rule-is-atmedia)
-           'inside-atmedia)
-          ((cssm-inside-atmedia-rule)
-           'inside-rule-and-atmedia)
-          (t
-           'inside-rule)))
-        ((string= construct "/*")
-         'inside-comment)
-        ((string= construct "}")
-         (if (cssm-inside-atmedia-rule)
-             'inside-atmedia
-           'outside))
-        (t 'outside))
-       (cond
+        (save-excursion
+          (let ((construct      (match-string 0))
+                (column         (current-column)))
+            (apply cssm-indent-function
+                   (list (cond
+                          ((string= construct "{")
+                           (cond
+                            ((cssm-rule-is-atmedia)
+                             'inside-atmedia)
+                            ((cssm-inside-atmedia-rule)
+                             'inside-rule-and-atmedia)
+                            (t
+                             'inside-rule)))
+                          ((string= construct "/*")
+                           'inside-comment)
+                          ((string= construct "}")
+                           (if (cssm-inside-atmedia-rule)
+                               'inside-atmedia
+                             'outside))
+                          (t 'outside))
+                         (cond
                           ((string= construct "<")
                            (save-excursion
                              (back-to-indentation)
@@ -264,38 +264,38 @@ saving keyboard macros (see `insert-kbd-macro')."
                              (current-column)))
                           (t
                            column))
-       first-char))))
+                         first-char))))
 
       (apply cssm-indent-function
-       (list 'outside
-       (current-column)
-       first-char)))))
+             (list 'outside
+                   (current-column)
+                   first-char)))))
 
 (defun cssm-indent-line()
   "Indents the current line."
   (interactive)
   (beginning-of-line)
   (let* ((beg-of-line (point))
-   (pos (re-search-forward "[]@#a-zA-Z0-9;,.\"{}/*\n:[]" (point-max) t))
-   (first (match-string 0))
-   (start (match-beginning 0)))
+         (pos (re-search-forward "[]@#a-zA-Z0-9;,.\"{}/*\n:[]" (point-max) t))
+         (first (match-string 0))
+         (start (match-beginning 0)))
 
     (goto-char beg-of-line)
 
     (let ((indent-column (cssm-find-column first)))
       (goto-char beg-of-line)
 
-      ; Remove all leading whitespace on this line (
+      ;; Remove all leading whitespace on this line (
       (if (not (or (null pos)
-       (= beg-of-line start)))
-    (kill-region beg-of-line start))
+                   (= beg-of-line start)))
+          (kill-region beg-of-line start))
 
       (goto-char beg-of-line)
 
-      ; Indent
+      ;; Indent
       (while (< 0 indent-column)
-  (insert " ")
-  (setq indent-column (- indent-column 1))))))
+        (insert " ")
+        (setq indent-column (- indent-column 1))))))
 
 ;;; Indent-style functions
 
@@ -303,7 +303,7 @@ saving keyboard macros (see `insert-kbd-macro')."
   (cond
    ((eq position 'inside-atmedia)
     (if (string= "}" first-char-on-line)
-  0
+        0
       cssm-indent-level))
 
    ((eq position 'inside-rule)
@@ -321,14 +321,14 @@ saving keyboard macros (see `insert-kbd-macro')."
 (defun cssm-c-style-indenter(position column first-char-on-line)
   (cond
    ((or (eq position 'inside-atmedia)
-  (eq position 'inside-rule))
+        (eq position 'inside-rule))
     (if (string= "}" first-char-on-line)
-  column
+        column
       (+ cssm-indent-level column)))
 
    ((eq position 'inside-rule-and-atmedia)
     (if (string= "}" first-char-on-line)
-  cssm-indent-level
+        cssm-indent-level
       (* 2 cssm-indent-level)))
 
    ((eq position 'inside-comment)
@@ -386,22 +386,22 @@ saving keyboard macros (see `insert-kbd-macro')."
 (defun cssm-property-at-point()
   "If point is at the end of a property name: returns it."
   (let ((end (point))
-  (start (+ (re-search-backward "[^-A-Za-z]") 1)))
+        (start (+ (re-search-backward "[^-A-Za-z]") 1)))
     (goto-char end)
     (buffer-substring start end)))
 
-; internal
+;; internal
 (defun cssm-maximum-common(alt1 alt2)
   "Returns the maximum common starting substring of alt1 and alt2."
   (let* ((maxlen (min (length alt1) (length alt2)))
-   (alt1 (substring alt1 0 maxlen))
-   (alt2 (substring alt2 0 maxlen)))
+         (alt1 (substring alt1 0 maxlen))
+         (alt2 (substring alt2 0 maxlen)))
     (while (not (string= (substring alt1 0 maxlen)
-       (substring alt2 0 maxlen)))
+                         (substring alt2 0 maxlen)))
       (setq maxlen (- maxlen 1)))
     (substring alt1 0 maxlen)))
 
-; internal
+;; internal
 (defun cssm-common-beginning(alts)
   "Returns the maximum common starting substring of all alts elements."
   (let ((common (car alts)))
@@ -409,14 +409,14 @@ saving keyboard macros (see `insert-kbd-macro')."
       (setq common (cssm-maximum-common alt common)))))
 
 (defun cssm-complete-property-frame(completions)
-  ; This code stolen from message.el. Kudos to larsi.
+  ;; This code stolen from message.el. Kudos to larsi.
   (let ((cur (current-buffer)))
     (pop-to-buffer "*Completions*")
     (buffer-disable-undo (current-buffer))
     (let ((buffer-read-only nil))
       (erase-buffer)
       (let ((standard-output (current-buffer)))
-  (display-completion-list (sort completions 'string<)))
+        (display-completion-list (sort completions 'string<)))
       (goto-char (point-min))
       (pop-to-buffer cur))))
 
@@ -424,35 +424,35 @@ saving keyboard macros (see `insert-kbd-macro')."
   "Completes the CSS property being typed at point."
   (interactive)
   (let* ((prop   (cssm-property-at-point))
-   (alts   (all-completions prop cssm-properties-alist))
-   (proplen (length prop)))
+         (alts   (all-completions prop cssm-properties-alist))
+         (proplen (length prop)))
     (if (= (length alts) 1)
-  (insert (substring (car alts) proplen))
+        (insert (substring (car alts) proplen))
       (let ((beg (cssm-common-beginning alts)))
-  (if (not (string= beg prop))
-      (insert (substring beg proplen))
-    (insert (substring
-       (completing-read "Property: " cssm-properties-alist nil
-            nil prop)
-       proplen)))))))
+        (if (not (string= beg prop))
+            (insert (substring beg proplen))
+          (insert (substring
+                   (completing-read "Property: " cssm-properties-alist nil
+                                    nil prop)
+                   proplen)))))))
 
 (defun css-mode()
   "Major mode for editing CSS style sheets.
 \\{cssm-mode-map}"
   (interactive)
 
-  ; Initializing
+  ;; Initializing
   (kill-all-local-variables)
 
-  ; Setting up indentation handling
+  ;; Setting up indentation handling
   (make-local-variable 'indent-line-function)
   (setq indent-line-function 'cssm-indent-line)
 
-  ; Setting up font-locking
+  ;; Setting up font-locking
   (make-local-variable 'font-lock-defaults)
   (setq font-lock-defaults '(cssm-font-lock-keywords nil t nil nil))
 
-  ; Setting up typing shortcuts
+  ;; Setting up typing shortcuts
   (make-local-variable 'skeleton-end-hook)
   (setq skeleton-end-hook nil)
 
@@ -461,22 +461,22 @@ saving keyboard macros (see `insert-kbd-macro')."
 
   (use-local-map cssm-mode-map)
 
-  ; Setting up syntax recognition
+  ;; Setting up syntax recognition
   (make-local-variable 'comment-start)
   (make-local-variable 'comment-end)
   (make-local-variable 'comment-start-skip)
 
   (setq comment-start "/* "
-  comment-end " */"
-  comment-start-skip "/\\*[ \n\t]+")
+        comment-end " */"
+        comment-start-skip "/\\*[ \n\t]+")
 
-  ; Setting up syntax table
+  ;; Setting up syntax table
   (modify-syntax-entry ?* ". 23")
   (modify-syntax-entry ?/ ". 14")
 
-  ; Final stuff, then we're done
+  ;; Final stuff, then we're done
   (setq mode-name "CSS"
-  major-mode 'css-mode)
+        major-mode 'css-mode)
   (run-hooks 'css-mode-hook))
 
 (provide 'css-mode)
