@@ -187,29 +187,31 @@ saving keyboard macros (see `insert-kbd-macro')."
 ;; internal
 (defun cssm-inside-atmedia-rule()
   "Decides if point is currently inside an @media rule."
-  (let ((orig-pos (point))
-        (atmedia (re-search-backward "@media" 0 t))
-        (balance 1)   ; used to keep the {} balance, 1 because we start on a {
-        )
-    ;; Going to the accompanying {
-    (re-search-forward "{" (point-max) t)
-    (if (null atmedia)
-        nil  ; no @media before this point => not inside
-      (while (and (< (point) orig-pos)
-                  (< 0 balance))
-        (if (null (re-search-forward "[{}]" (point-max) 0))
-            (goto-char (point-max)) ; break
-          (setq balance
-                (if (string= (match-string 0) "{")
-                    (+ balance 1)
-                  (- balance 1)))))
-      (= balance 1))
-    ))
+  (save-excursion
+    (let ((orig-pos (point))
+          (atmedia (re-search-backward "@media" 0 t))
+          (balance 1)   ; used to keep the {} balance, 1 because we start on a {
+          )
+      ;; Going to the accompanying {
+      (re-search-forward "{" (point-max) t)
+      (if (null atmedia)
+          nil  ; no @media before this point => not inside
+        (while (and (< (point) orig-pos)
+                    (< 0 balance))
+          (if (null (re-search-forward "[{}]" (point-max) 0))
+              (goto-char (point-max)) ; break
+            (setq balance
+                  (if (string= (match-string 0) "{")
+                      (+ balance 1)
+                    (- balance 1)))))
+        (= balance 1))
+      )))
 
 ;; internal
 (defun cssm-rule-is-atmedia()
   "Decides if point is currently on the { of an @media or ordinary style rule."
-  (let ((result (re-search-backward "[@}{]" 0 t)))
+  (let ((result (save-excursion
+                  (re-search-backward "[@}{]" 0 t))))
     (if (null result)
         nil
       (string= (match-string 0) "@"))))
@@ -222,53 +224,55 @@ FIRST-CHAR is the first character of THIS line."
   ;; Find out where to indent to by looking at previous lines
   ;; spinning backwards over comments
   (let (pos)
-    (while (and (setq pos (re-search-backward (cssm-list-2-regexp
-                                               '("/\\*" "\\*/" "{" "}" "<"))
-                                              (point-min) t))
-                (string= (match-string 0) "*/"))
-      (search-backward "/*" (point-min) t))
+    (save-excursion
+      (while (and (setq pos (re-search-backward (cssm-list-2-regexp
+                                                 '("/\\*" "\\*/" "{" "}" "<"))
+                                                (point-min) t))
+                  (string= (match-string 0) "*/"))
+        (search-backward "/*" (point-min) t)))
 
     ;; did the last search find anything?
     (if pos
-        (save-excursion
-          (let ((construct      (match-string 0))
-                (column         (current-column)))
-            (apply cssm-indent-function
-                   (list
-                    ;; rule
+        (let ((construct      (match-string 0))
+              (column         (current-column)))
+          (apply cssm-indent-function
+                 (list
+                  ;; rule
+                  (cond
+                   ((string= construct "{")
                     (cond
-                     ((string= construct "{")
-                      (cond
-                       ((cssm-rule-is-atmedia)
-                        'inside-atmedia)
-                       ((cssm-inside-atmedia-rule)
-                        'inside-rule-and-atmedia)
-                       (t
-                        'inside-rule)))
-                     ((string= construct "/*")
-                      'inside-comment)
-                     ((string= construct "}")
-                      (if (cssm-inside-atmedia-rule)
-                          'inside-atmedia
-                        'outside))
-                     (t 'outside))
-                    ;; column
-                    (cond
-                     ((string= construct "<")
-                      ;; We are in <style>
-                      (save-excursion
-                        (back-to-indentation)
-                        (+ (current-column) cssm-indent-level)))
-                     ((member construct '("{" "}"))
-                      ;; whether we are inside or outside, we give the
-                      ;; left most column of this block to an indent
-                      ;; function
-                      (save-excursion
-                        (back-to-indentation)
-                        (current-column)))
+                     ((cssm-rule-is-atmedia)
+                      'inside-atmedia)
+                     ((cssm-inside-atmedia-rule)
+                      'inside-rule-and-atmedia)
                      (t
-                      column))
-                    first-char))))
+                      'inside-rule)))
+                   ((string= construct "/*")
+                    'inside-comment)
+                   ((string= construct "}")
+                    (if (cssm-inside-atmedia-rule)
+                        'inside-atmedia
+                      'outside))
+                   (t 'outside))
+                  ;; column
+                  (cond
+                   ((string= construct "<")
+                    ;; We are in <style>
+                    (save-excursion
+                      (re-search-backward "<style" nil t)
+                      (back-to-indentation)
+                      (+ (current-column) cssm-indent-level)))
+                   ((member construct '("{" "}"))
+                    ;; whether we are inside or outside, we pass the
+                    ;; left most column of this block to an indent
+                    ;; function
+                    (save-excursion
+                      (re-search-backward "[{}]" nil t)
+                      (back-to-indentation)
+                      (current-column)))
+                   (t
+                    column))
+                  first-char)))
 
       (apply cssm-indent-function
              (list 'outside
@@ -324,6 +328,8 @@ FIRST-CHAR is the first character of THIS line."
 
 (defun cssm-c-style-indenter(position column first-char-on-line)
   ;; COLUMN is the left-most column of this block.
+  ;; (message "DEBUG: current-line: %s" (buffer-substring-no-properties (line-beginning-position)
+  ;;                                                                  (line-end-position)))
   (cond
    ((or (eq position 'inside-atmedia)
         (eq position 'inside-rule))
@@ -340,7 +346,19 @@ FIRST-CHAR is the first character of THIS line."
     (+ column 3))
 
    ((eq position 'outside)
-    column)))
+    (if (re-search-backward "[}>]" nil t)
+        (let ((s (match-string-no-properties 0)))
+          (cond
+           ((string= s ">")
+            column)
+           ((string= s "}")
+            (save-excursion
+              (re-search-backward "}" nil t)
+              (back-to-indentation)
+              (current-column)))
+           (t
+            column)))
+      column))))
 
 ;;; Typing shortcuts
 
