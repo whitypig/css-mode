@@ -282,28 +282,48 @@ FIRST-CHAR is the first character of THIS line."
 (defun cssm-indent-line()
   "Indents the current line."
   (interactive)
-  (beginning-of-line)
-  (let* ((beg-of-line (point))
+  (let* ((old-pos (point))
+         ;; We have to go to the beginning of this line.
+         (beg-of-line (progn (beginning-of-line)
+                             (point)))
          (pos (re-search-forward "[]@#a-zA-Z0-9;,.\"{}/*\n:[]" (point-max) t))
          (first (match-string 0))
          (start (match-beginning 0)))
-
     (goto-char beg-of-line)
-
-    (let ((indent-column (cssm-find-column first)))
-      (goto-char beg-of-line)
-
-      ;; Remove all leading whitespace on this line (
-      (if (not (or (null pos)
-                   (= beg-of-line start)))
-          (kill-region beg-of-line start))
-
-      (goto-char beg-of-line)
-
-      ;; Indent
-      (while (< 0 indent-column)
-        (insert " ")
-        (setq indent-column (- indent-column 1))))))
+    (let ((indent-column (cssm-find-column first)) ; num of columns to indent
+          (cur-column (save-excursion
+                        (goto-char old-pos)
+                        (back-to-indentation)
+                        (current-column))))
+      (cond
+       ((and (= indent-column cur-column)
+             ;; If this line is already indented and
+             (or
+              ;; this line contains non-whitespace chars, or
+              (not (string-match "[\n\r]" first))
+              ;; this line is an empty line
+              (progn (save-excursion
+                       (goto-char beg-of-line)
+                       (string-match "^[ \t]+$" (buffer-substring-no-properties
+                                                 (line-beginning-position)
+                                                 (line-end-position)))))))
+        ;; then we don't need to indent
+        (goto-char old-pos)
+        (when (member (char-after) '(?  ?	))
+          ;; When the cursor is between beg-of-line and leading whitespaces,
+          ;; move the cursor to the first non-whitespace character.
+          (back-to-indentation)))
+       (t
+        (goto-char beg-of-line)
+        ;; Remove all leading whitespaces on this line (
+        (if (not (or (null pos)
+                     (= beg-of-line start)))
+            (kill-region beg-of-line start))
+        (goto-char beg-of-line)
+        ;; Indent
+        (while (< 0 indent-column)
+          (insert " ")
+          (setq indent-column (- indent-column 1))))))))
 
 ;;; Indent-style functions
 
