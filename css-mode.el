@@ -226,7 +226,7 @@ FIRST-CHAR is the first character of THIS line."
   (let (pos)
     (save-excursion
       (while (and (setq pos (re-search-backward (cssm-list-2-regexp
-                                                 '("/\\*" "\\*/" "{" "}" "<"))
+                                                 '("/\\*" "\\*/" "{" "}" "<" ";" ","))
                                                 (point-min) t))
                   (string= (match-string 0) "*/"))
         (search-backward "/*" (point-min) t)))
@@ -234,7 +234,8 @@ FIRST-CHAR is the first character of THIS line."
     ;; did the last search find anything?
     (if pos
         (let ((construct      (match-string 0))
-              (column         (current-column)))
+              (column         (current-column))
+              (comma-cont-inside-rule nil))
           (apply cssm-indent-function
                  (list
                   ;; rule
@@ -253,6 +254,18 @@ FIRST-CHAR is the first character of THIS line."
                     (if (cssm-inside-atmedia-rule)
                         'inside-atmedia
                       'outside))
+                   ((and (not (string= first "}")) (string= construct ";"))
+                    'inside-rule)
+                   ((string= construct ",")
+                    (save-excursion
+                      (if (re-search-backward "[:}]" nil t)
+                          (cond
+                           ((string= ":" (match-string 0))
+                            (setq comma-cont-inside-rule t)
+                            'inside-rule)
+                           ((string= "}" (match-string 0))
+                            'outside))
+                        'outside)))
                    (t 'outside))
                   ;; column
                   (cond
@@ -262,7 +275,8 @@ FIRST-CHAR is the first character of THIS line."
                       (re-search-backward "<style" nil t)
                       (back-to-indentation)
                       (+ (current-column) cssm-indent-level)))
-                   ((member construct '("{" "}"))
+                   ((or (member construct '("{" "}"))
+                        (string= first "}"))
                     ;; whether we are inside or outside, we pass the
                     ;; left most column of this block to an indent
                     ;; function
@@ -270,6 +284,25 @@ FIRST-CHAR is the first character of THIS line."
                       (re-search-backward "[{}]" nil t)
                       (back-to-indentation)
                       (current-column)))
+                   ((and (not (string= first "}")) (string= construct ";"))
+                    (setq first-char ";")
+                    (save-excursion
+                      (goto-char pos)
+                      (re-search-backward "[a-z-]+:" nil t)
+                      (back-to-indentation)
+                      (current-column)))
+                   ((string= construct ",")
+                    (if (not comma-cont-inside-rule)
+                        column
+                      (progn
+                        ;; there seems to be multiple values
+                        (setq first-char ",")
+                        (save-excursion
+                          ;; this should match
+                          (goto-char pos)
+                          (re-search-backward ":[ \t]+" nil (line-beginning-position))
+                          (goto-char (match-end 0))
+                          (current-column)))))
                    (t
                     column))
                   first-char)))
@@ -353,9 +386,15 @@ FIRST-CHAR is the first character of THIS line."
   (cond
    ((or (eq position 'inside-atmedia)
         (eq position 'inside-rule))
-    (if (string= "}" first-char-on-line)
-        column
-      (+ cssm-indent-level column)))
+    (cond
+     ((string= "}" first-char-on-line)
+      column)
+     ((string= ";" first-char-on-line)
+      column)
+     ((string= "," first-char-on-line)
+      column)
+     (t
+      (+ cssm-indent-level column))))
 
    ((eq position 'inside-rule-and-atmedia)
     (if (string= "}" first-char-on-line)
