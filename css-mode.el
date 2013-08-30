@@ -219,7 +219,7 @@ saving keyboard macros (see `insert-kbd-macro')."
 ;; internal
 (defun cssm-find-column(first-char)
   "Find which column to indent to.
-FIRST-CHAR is the first character of THIS line."
+FIRST-CHAR is the first character of the current line."
 
   ;; Find out where to indent to by looking at previous lines
   ;; spinning backwards over comments
@@ -234,83 +234,95 @@ FIRST-CHAR is the first character of THIS line."
     ;; did the last search find anything?
     (if pos
         (let ((construct      (match-string 0))
-              (column         (current-column))
-              (comma-cont-inside-rule nil))
-          (apply cssm-indent-function
-                 (list
-                  ;; rule
-                  (cond
-                   ((string= construct "{")
-                    (cond
-                     ((cssm-rule-is-atmedia)
-                      'inside-atmedia)
-                     ((cssm-inside-atmedia-rule)
-                      'inside-rule-and-atmedia)
-                     (t
-                      'inside-rule)))
-                   ((string= construct "/*")
-                    'inside-comment)
-                   ((string= construct "}")
-                    (if (cssm-inside-atmedia-rule)
-                        'inside-atmedia
-                      'outside))
-                   ((and (not (string= first "}")) (string= construct ";"))
-                    'inside-rule)
-                   ((string= construct ",")
-                    (save-excursion
-                      (if (re-search-backward "[:}]" nil t)
-                          (cond
-                           ((string= ":" (match-string 0))
-                            (setq comma-cont-inside-rule t)
-                            'inside-rule)
-                           ((string= "}" (match-string 0))
-                            'outside))
-                        'outside)))
-                   (t 'outside))
-                  ;; column
-                  (cond
-                   ((string= construct "<")
-                    ;; We are in <style>
-                    (save-excursion
-                      (re-search-backward "<style" nil t)
-                      (back-to-indentation)
-                      (+ (current-column) cssm-indent-level)))
-                   ((or (member construct '("{" "}"))
-                        (string= first "}"))
-                    ;; whether we are inside or outside, we pass the
-                    ;; left most column of this block to an indent
-                    ;; function
-                    (save-excursion
-                      (re-search-backward "[{}]" nil t)
-                      (back-to-indentation)
-                      (current-column)))
-                   ((and (not (string= first "}")) (string= construct ";"))
-                    (setq first-char ";")
-                    (save-excursion
-                      (goto-char pos)
-                      (re-search-backward "[a-z-]+:" nil t)
-                      (back-to-indentation)
-                      (current-column)))
-                   ((string= construct ",")
-                    (if (not comma-cont-inside-rule)
-                        column
-                      (progn
-                        ;; there seems to be multiple values
-                        (setq first-char ",")
-                        (save-excursion
-                          ;; this should match
-                          (goto-char pos)
-                          (re-search-backward ":[ \t]+" nil (line-beginning-position))
-                          (goto-char (match-end 0))
-                          (current-column)))))
-                   (t
-                    column))
-                  first-char)))
+              (column         (current-column)))
+          (multiple-value-bind (column-to-indent ch)
+              (cssm-find-out-column construct first-char pos column)
+            (apply cssm-indent-function
+                   (list
+                    ;; rule
+                    (cssm-find-out-rule construct first-char)
+                    ;; column
+                    column-to-indent
+                    ch))))
 
       (apply cssm-indent-function
              (list 'outside
                    (current-column)
                    first-char)))))
+
+(defun cssm-find-out-rule (construct first-char)
+  (cond
+   ((string= construct "{")
+    (cond
+     ((cssm-rule-is-atmedia)
+      'inside-atmedia)
+     ((cssm-inside-atmedia-rule)
+      'inside-rule-and-atmedia)
+     (t
+      'inside-rule)))
+   ((string= construct "/*")
+    'inside-comment)
+   ((string= construct "}")
+    (if (cssm-inside-atmedia-rule)
+        'inside-atmedia
+      'outside))
+   ((and (not (string= first-char "}")) (string= construct ";"))
+    'inside-rule)
+   ((string= construct ",")
+    ;; construct being "," means that a continued css value or
+    ;; multiple selectors follow.
+    (save-excursion
+      (if (re-search-backward "[{}]" nil t)
+          (cond
+           ((string= "{" (match-string 0))
+            'inside-rule)
+           ((string= "}" (match-string 0))
+            'outside))
+        'outside)))
+   (t 'outside)))
+
+(defun cssm-find-out-column (construct first-char pos column)
+  (cond
+   ((string= construct "<")
+    ;; We are in <style>
+    (save-excursion
+      (re-search-backward "<style" nil t)
+      (back-to-indentation)
+      (+ (current-column) cssm-indent-level)))
+   ((or (member construct '("{" "}"))
+        (string= first-char "}"))
+    ;; whether we are inside or outside, we pass the
+    ;; left most column of this block to an indent
+    ;; function
+    (save-excursion
+      (re-search-backward "[{}]" nil t)
+      (back-to-indentation)
+      (values (current-column) first-char)))
+   ((and (not (string= first-char "}")) (string= construct ";"))
+    ;; cases where another property follows
+    (save-excursion
+      (goto-char pos)
+      (re-search-backward "[a-z-]+:" nil t)
+      (back-to-indentation)
+      (values (current-column) ";")))
+   ((string= construct ",")
+    ;; cass where another property value follows or
+    ;; multiple selectors are here.
+    (if (save-excursion
+          (re-search-backward "[{}]" nil t)
+          (string= "}" (match-string 0)))
+        ;; we are outside the rule, meaning another selector follows
+        (values column first-char)
+      (progn
+        ;; there seems to be multiple property values
+        (save-excursion
+          ;; this should match
+          (goto-char pos)
+          (re-search-backward ":[ \t]+" nil (line-beginning-position))
+          (goto-char (match-end 0))
+          (values (current-column) ",")))))
+   (t
+    (valus column first-char))))
 
 (defun cssm-indent-line()
   "Indents the current line."
