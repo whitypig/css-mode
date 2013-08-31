@@ -272,7 +272,7 @@ FIRST-CHAR is the first character of the current line."
     ;; construct being "," means that a continued css value or
     ;; multiple selectors follow.
     (save-excursion
-      (if (re-search-backward "[{}]" nil t)
+      (if (cssm-re-search-backward-skipping-comments "[{}]" nil)
           (cond
            ((string= "{" (match-string 0))
             'inside-rule)
@@ -282,20 +282,18 @@ FIRST-CHAR is the first character of the current line."
    (t 'outside)))
 
 (defun cssm-find-out-column (construct first-char pos column)
+  "Return the num of columns to indent."
   (cond
-   ((string= construct "<")
-    ;; We are in <style>
-    (save-excursion
-      (re-search-backward "<style" nil t)
-      (back-to-indentation)
-      (+ (current-column) cssm-indent-level)))
+   ((save-excursion (re-search-backward "<style" nil t))
+    ;; We are in <style> tag
+    (cssm-find-out-column-in-style construct first-char pos column))
    ((or (member construct '("{" "}"))
         (string= first-char "}"))
     ;; whether we are inside or outside, we pass the
     ;; left most column of this block to an indent
     ;; function
     (save-excursion
-      (re-search-backward "[{}]" nil t)
+      (cssm-re-search-backward-skipping-comments "[{}]" nil)
       (back-to-indentation)
       (values (current-column) first-char)))
    ((and (not (string= first-char "}")) (string= construct ";"))
@@ -308,21 +306,72 @@ FIRST-CHAR is the first character of the current line."
    ((string= construct ",")
     ;; cass where another property value follows or
     ;; multiple selectors are here.
-    (if (save-excursion
-          (re-search-backward "[{}]" nil t)
-          (string= "}" (match-string 0)))
-        ;; we are outside the rule, meaning another selector follows
-        (values column first-char)
-      (progn
-        ;; there seems to be multiple property values
-        (save-excursion
-          ;; this should match
-          (goto-char pos)
-          (re-search-backward ":[ \t]+" nil (line-beginning-position))
-          (goto-char (match-end 0))
-          (values (current-column) ",")))))
+    (cssm-find-out-column-with-comma nil))
    (t
-    (valus column first-char))))
+    (values column first-char))))
+
+(defun cssm-find-out-column-in-style (construct first-char pos column)
+  (let ((beg-of-style (save-excursion (re-search-backward "<style" nil t)))
+        (matched nil))
+    (cond
+     ((string= first-char "}")
+      (assert (cssm-re-search-backward-skipping-comments "{" nil))
+      (back-to-indentation)
+      (values (current-column) first-char))
+     ((string= construct ",")
+      (cssm-find-out-column-with-comma t))
+     (t
+      (cssm-re-search-backward-skipping-comments "{" beg-of-style)
+      (back-to-indentation)
+      (values (current-column) first-char)))))
+
+(defun cssm-find-out-column-with-comma (&optional in-style)
+  (if (or (save-excursion (not (cssm-re-search-backward-skipping-comments "[{}]" nil)))
+          ;; we are at the inside of the first selectors or,
+          (save-excursion
+            ;; another selector follows
+            (and (cssm-re-search-backward-skipping-comments "[{}]" nil)
+                 (string= "}" (match-string 0)))))
+      (cond
+       (in-style
+        (assert (re-search-backward "<style" nil t))
+        (back-to-indentation)
+        (values (+ (current-column) cssm-indent-level) first-char))
+       (t
+        (values column first-char)))
+    (progn
+      ;; there seems to be multiple property values
+      (save-excursion
+        (goto-char pos)
+        ;; this should match
+        (assert (cssm-re-search-backward-skipping-comments ":[ \t]*" nil))
+        (goto-char (match-end 0))
+        (values (current-column) ",")))))
+
+(defun cssm-re-search-backward-skipping-comments (regexp bound)
+  "Search for regexp while skipping comments if necessary."
+  (let* ((end-of-comment (save-excursion (re-search-backward "\\*/" bound t)))
+         (beg-of-comment (and end-of-comment
+                              (save-excursion
+                                (goto-char end-of-comment)
+                                (re-search-backward "/\\*" bound t))))
+         (pos (save-excursion (re-search-backward regexp bound t))))
+    (cond
+     ;; we assume that comments would balanced
+     ((and beg-of-comment end-of-comment pos)
+      (if (or (< end-of-comment pos)
+              (> beg-of-comment pos))
+          ;; the regexp is found somewhere other than between a comment.
+          (goto-char pos)
+        (progn
+          ;; retry searching from the point before the comment starter
+          (goto-char beg-of-comment)
+          (cssm-re-search-backward-skipping-comments regexp bound))))
+     (pos
+      ;; move to and return the found position
+      (goto-char pos))
+     (t
+      nil))))
 
 (defun cssm-indent-line()
   "Indents the current line."
@@ -417,19 +466,21 @@ FIRST-CHAR is the first character of the current line."
     (+ column 3))
 
    ((eq position 'outside)
-    (if (re-search-backward "[}>]" nil t)
-        (let ((s (match-string-no-properties 0)))
-          (cond
-           ((string= s ">")
-            column)
-           ((string= s "}")
-            (save-excursion
-              (re-search-backward "}" nil t)
-              (back-to-indentation)
-              (current-column)))
-           (t
-            column)))
-      column))))
+    column)
+    ;; (if (re-search-backward "[}>]" nil t)
+    ;;     (let ((s (match-string-no-properties 0)))
+    ;;       (cond
+    ;;        ((string= s ">")
+    ;;         column)
+    ;;        ((string= s "}")
+    ;;         (save-excursion
+    ;;           (re-search-backward "}" nil t)
+    ;;           (back-to-indentation)
+    ;;           (current-column)))
+    ;;        (t
+    ;;         column)))
+    ;;   column))
+    ))
 
 ;;; Typing shortcuts
 
