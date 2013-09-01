@@ -1,6 +1,6 @@
 (defun test-cssm:init ()
   (with-temp-buffer
-    (insert-file-contents "./css-mode.el")
+    (insert-file-contents "../css-mode.el")
     (eval-buffer)))
 
 (defun test-cssm:fixture (filename body)
