@@ -65,6 +65,8 @@
 ; Customizable variables:
 
 (defvar cssm-indent-level 2 "The indentation level inside @media rules.")
+(defvar cssm-indent-level-after-style 2
+  "The indentation level just after the style tag.")
 (defvar cssm-mirror-mode t
   "Whether brackets, quotes etc should be mirrored automatically on
   insertion.")
@@ -306,26 +308,34 @@ FIRST-CHAR is the first character of the current line."
    ((string= construct ",")
     ;; cass where another property value follows or
     ;; multiple selectors are here.
-    (cssm-find-out-column-with-comma nil))
+    (cssm-find-out-column-after-comma nil))
    (t
     (values column first-char))))
 
 (defun cssm-find-out-column-in-style (construct first-char pos column)
   (let ((beg-of-style (save-excursion (re-search-backward "<style" nil t)))
-        (matched nil))
+        (matched nil)
+        (location nil))
     (cond
      ((string= first-char "}")
-      (assert (cssm-re-search-backward-skipping-comments "{" nil))
+      (assert (cssm-re-search-backward-skipping-comments "{" beg-of-style))
       (back-to-indentation)
       (values (current-column) first-char))
      ((string= construct ",")
-      (cssm-find-out-column-with-comma t))
-     (t
-      (cssm-re-search-backward-skipping-comments "{" beg-of-style)
+      (cssm-find-out-column-after-comma t))
+     ((save-excursion
+        (setq location (cssm-re-search-backward-skipping-comments "{" beg-of-style)))
+      (goto-char location)
       (back-to-indentation)
-      (values (current-column) first-char)))))
+      (values (current-column) first-char))
+     (t
+      ;; we are on the first selectors following the style tag.
+      (goto-char beg-of-style)
+      (back-to-indentation)
+      (values (+ (current-column) cssm-indent-level-after-style) first-char)
+      ))))
 
-(defun cssm-find-out-column-with-comma (&optional in-style)
+(defun cssm-find-out-column-after-comma (&optional in-style)
   (if (or (save-excursion (not (cssm-re-search-backward-skipping-comments "[{}]" nil)))
           ;; we are at the inside of the first selectors or,
           (save-excursion

@@ -116,3 +116,12 @@
      (should (re-search-forward "dummy-bg-color"))
      (beginning-of-line)
      (should (= 8 (cssm-find-column "b"))))))
+
+(ert-deftest test-cssm:cssm-find-column:on-topmost-selector-in-style ()
+  (test-cssm:fixture
+   "./test.noindentation.html"
+   (lambda ()
+     (should (re-search-forward "<style" nil t))
+     (forward-line)
+     (beginning-of-line)
+     (should (= cssm-indent-level-after-style (cssm-find-column "h"))))))
